@@ -2,11 +2,11 @@
 package main
 
 import (
+	"autobricks/net"
 	"sync"
 
 	//"bytes"
 	"autobricks/handle"
-	"compress/gzip"
 	"encoding/json"
 	"fmt"
 
@@ -14,41 +14,6 @@ import (
 
 	"golang.org/x/net/websocket"
 )
-
-const (
-	huobiOriginURL = "http://api.huobi.pro"
-	huobiWssURL    = "wss://api.huobi.pro/ws"
-)
-
-func onMessage(ws *websocket.Conn) {
-	for {
-		frameReader, err := ws.NewFrameReader()
-		if err != nil {
-			fmt.Printf("err: %s\n", err.Error())
-			return
-		}
-
-		frame, err := ws.HandleFrame(frameReader)
-		if err != nil {
-			fmt.Printf("err: %s\n", err.Error())
-			return
-		}
-
-		gzip, err := gzip.NewReader(frame)
-		if err != nil {
-			fmt.Printf("err: %s\n", err.Error())
-			return
-		}
-		decoder := json.NewDecoder(gzip)
-		var resp map[string]interface{}
-		decoder.Decode(&resp)
-		if ts, ok := resp["ping"]; ok {
-			handle.PingHandle(ws, ts)
-		}
-
-		fmt.Println(resp)
-	}
-}
 
 func Sub(ws *websocket.Conn) {
 	var subReq = map[string]string{}
@@ -69,7 +34,14 @@ func main() {
 
 	var wg sync.WaitGroup
 	wg.Add(1)
-	go onMessage(ws)
+
+	client := net.NewWsClient(huobiWssURL, HuobiOriginURL)
+	if client == nil {
+		fmt.Println("connect to server failed")
+		wg.Done()
+	}
+
+	client.read()
 
 	wg.Wait()
 }

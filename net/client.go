@@ -1,8 +1,14 @@
 package net
 
 import (
+	"io"
+
 	"golang.org/x/net/websocket"
 )
+
+type Decoder interface {
+	Decode(r io.Reader) (interface{}, error)
+}
 
 //WSClient websocket客户端
 type WSClient struct {
@@ -12,17 +18,37 @@ type WSClient struct {
 	wsURL     string
 }
 
+type RespFunc func(data []byte)
+
 //Connect   连接ws服务器
-func (client *WSClient) Connect(url, origin string) error {
+func NewWsClient(url, origin string) *WSClient {
 	conn, err := websocket.Dial(url, "", origin)
 	if err != nil {
-		return err
+		return nil
 	}
+
+	client := WSClient{}
 	client.conn = conn
 
 	//保存地址，断线线后重连
 	client.originURL = origin
 	client.wsURL = url
 
-	return nil
+	return &client
+}
+
+func (client *WSClient) Read(decoder Decoder) (interface{}, error) {
+	frameReader, err := client.conn.NewFrameReader()
+	if err != nil {
+		return nil, err
+	}
+
+	frame, err := client.conn.HandleFrame(frameReader)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := decoder.Decode(frame)
+
+	return resp, nil
 }
