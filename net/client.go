@@ -21,10 +21,10 @@ type WSClient struct {
 type RespFunc func(data []byte)
 
 //Connect   连接ws服务器
-func NewWsClient(url, origin string) *WSClient {
+func NewWsClient(url, origin string) (*WSClient, error) {
 	conn, err := websocket.Dial(url, "", origin)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	client := WSClient{}
@@ -34,7 +34,7 @@ func NewWsClient(url, origin string) *WSClient {
 	client.originURL = origin
 	client.wsURL = url
 
-	return &client
+	return &client, nil
 }
 
 func (client *WSClient) Read(decoder Decoder) (interface{}, error) {
