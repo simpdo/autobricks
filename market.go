@@ -20,24 +20,35 @@ type MarketConfig struct {
 	decoder   net.Decoder //市场协议解析
 }
 
-//MarketProxy 市场代理，负责处理与市场之间的通信，和市场数据的管理
-type MarketProxy struct {
-	client *net.WSClient
+//MarketClient 市场代理，负责处理与市场之间的通信，和市场数据的管理
+type MarketClient struct {
+	client  *net.WSClient
+	decoder net.Decoder
 }
 
-//NewMarketProxy 生成市场代理
-func NewMarketProxy(config *MarketConfig) *MarketProxy {
+//NewMarketClient 生成市场代理
+func NewMarketClient(config *MarketConfig) *MarketClient {
 	client, err := net.NewWsClient(HuobiWssURL, HuobiOriginURL)
 	if client == nil {
 		fmt.Println(err.Error())
 		return nil
 	}
 
+	var proxy = MarketClient{}
+	proxy.client = client
+	proxy.decoder = config.decoder
+	return &proxy
+
 }
 
 //Start 开始运行。保持和市场的通信
-func (m *MarketProxy) Start() {
+func (proxy *MarketClient) Start() {
 	for {
+		data, err := proxy.client.Read(proxy.decoder)
+		if err != nil {
+			fmt.Println(err.Error())
+		}
 
+		fmt.Println(data)
 	}
 }
