@@ -12,6 +12,8 @@ import (
 type Proxy interface {
 	Decode(r io.Reader) (map[string]interface{}, error)
 	Handle(message map[string]interface{}) []byte
+
+	Subscribe(symbol string, step int)
 }
 
 type MarketConfig struct {
@@ -36,4 +38,6 @@ func (m *Market) Start() {
 	}
 }
 
-func (m *Market)strt
+func (m *Market) Subscribe(symbol string, step int) {
+	m.proxy.EncodeSubscribe(symbol, step)
+}
