@@ -2,3 +2,5 @@
 autobricks
 resp.txt
 *.exe
+log
+*.log.*

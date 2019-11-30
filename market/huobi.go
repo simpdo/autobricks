@@ -1,12 +1,13 @@
 package market
 
 import (
-	"autobricks/util"
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
-	"io"
 	"regexp"
+
+	"adidos.cn/autobricks/util"
+	"github.com/golang/glog"
 
 	"golang.org/x/net/websocket"
 )
@@ -28,75 +29,98 @@ const (
 	subbedResp = "subbed"
 )
 
+//HuobiSubNotify 订阅通知
 type HuobiSubNotify struct {
 	Channel   string   `json:"ch"`
 	Timestamp int      `json:"ts"`
 	Tick      TickData `json:"tick"`
 }
 
-//NewHuobiMarket create
-func NewHuobiMarket() *Market {
-	conn, err := websocket.Dial(HuobiWssURL, "", HuobiOriginURL)
-	if err != nil {
-		fmt.Println(err.Error())
-		return nil
-	}
-
-	return &Market{conn: conn, proxy: HuobiProxy{ID: HuobiID}}
+//HuobiSubscribeResp 订阅回复
+type HuobiSubscribeResp struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+	Subbed string `json:"subbed"`
+	Ts     int    `json:"ts"`
 }
 
-//HuobiProxy  struct
 type HuobiProxy struct {
-	ID string
+	conn *websocket.Conn
+	ID   string
 }
 
-//Decode decode net message
-func (proxy HuobiProxy) Decode(r io.Reader, message interface{}) error {
-
-	gzip, err := gzip.NewReader(r)
+//NewHuobiMarket create
+func NewHuobiProxy() (*HuobiProxy, error) {
+	conn, err := websocket.Dial(HuobiWssURL, "", HuobiOriginURL)
 	if err != nil {
 		return nil, err
 	}
-	var resp map[string]interface{}
 
-	decoder := json.NewDecoder(gzip)
-	err = decoder.Decode(&resp)
-
-	return resp, err
+	return &HuobiProxy{conn: conn, ID: HuobiID}, nil
 }
 
-//Handle handle message
-func (proxy HuobiProxy) Handle(message interface{}) []byte {
-	resp := map[string]interface{}{}
-
-	buff, err := json.Marshal(message)
-
-	fmt.Println(string(buff))
-
-	if proxy.isSubbedResp(resp) {
-		fmt.Println("received subscribe response")
-	} else if proxy.isSubbedNotify(resp) {
-		fmt.Println("received a subscribe notify")
-	} else if proxy.isPing(resp) {
-		fmt.Println("received a subscribe notify")
-	} else if proxy.isOrderPing(resp) {
-
-	}
-
-	return nil
-}
-
-func (proxy HuobiProxy) Subscribe(item string, step int) {
-	var req = map[string]string{}
+//Subscribe 订阅请求
+func (proxy *HuobiProxy) Subscribe(item string, step int) error {
+	req := make(map[string]string)
 	req["id"] = proxy.ID
 	req["sub"] = fmt.Sprintf("market.%s.depth.step%d", item, step)
 
 	buff, err := json.Marshal(req)
 	if err != nil {
-		fmt.Println(err.Error())
-		return false
+		return err
 	}
 
+	_, err = proxy.conn.Write(buff)
+	if err != nil {
+		return err
+	}
+
+	var resp HuobiSubscribeResp
+	err = proxy.decode(&resp)
+	if err != nil {
+		return err
+	}
+
+	glog.Infof("subscribe %s response %v", item, resp)
+	return nil
+}
+
+//Handle handle message
+func (proxy *HuobiProxy) Start() {
+	for {
+		message := make(map[string]interface{})
+		err := proxy.decode(message)
+		if err != nil {
+			glog.Errorf("huobi decode buffer error %s", err.Error())
+			continue
+		}
+
+		buff, err := json.Marshal(message)
+		glog.Infof("huobi message %s", string(buff))
+
+		if proxy.isSubbedNotify(message) {
+			glog.Info("received a subscribe notify")
+		} else if proxy.isPing(message) {
+			glog.Info("received a subscribe notify")
+		} else if proxy.isOrderPing(message) {
+			glog.Info("received a order ping")
+		}
+	}
+
+	return
+}
+
+//Decode decode net message
+func (proxy *HuobiProxy) decode(message interface{}) error {
+	gzip, err := gzip.NewReader(proxy.conn)
+	if err != nil {
+		return err
+	}
+
+	decoder := json.NewDecoder(gzip)
+	err = decoder.Decode(message)
+
+	return err
 }
 
 func (proxy HuobiProxy) isSubbedNotify(m map[string]interface{}) bool {
@@ -112,11 +136,6 @@ func (proxy HuobiProxy) isSubbedNotify(m map[string]interface{}) bool {
 	}
 
 	return result
-}
-
-func (proxy HuobiProxy) isSubbedResp(m map[string]interface{}) bool {
-	_, ok := util.GetStrValue(m, "subbed")
-	return ok
 }
 
 func (proxy HuobiProxy) isPing(m map[string]interface{}) bool {
